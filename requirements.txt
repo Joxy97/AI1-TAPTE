@@ -1,0 +1,8 @@
+numpy
+h5py
+torch
+torchvision
+torchaudio
+lightning
+scikit-learn
+itertools
