@@ -4,5 +4,12 @@ torch
 torchvision
 torchaudio
 lightning
+tensorboard
 scikit-learn
 itertools
+awkward
+click
+uproot
+vector
+coffea
+pathlib
