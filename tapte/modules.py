@@ -324,21 +324,22 @@ class HybridSymmetricLoss(nn.Module):
     self.categorizer_loss_weight = options_file["categorizer_loss_weight"]
 
   def forward(self, assignments, category, assignments_labels, category_labels):
+    device = assignments.device
     indices = torch.arange(assignments.size(1))
-    self.min_loss = torch.ones(assignments.size(0)) * float('inf')
-    self.perm = torch.empty(assignments.size(0), assignments.size(1))
+    min_loss = torch.ones(assignments.size(0)) * float('inf')
+    perm = torch.empty(assignments.size(0), assignments.size(1))
+        
     for i in permutations(indices):
-      for event in range(assignments.size(0)):
-        l = self.loss(assignments[event, list(i), :, :], assignments_labels[event])
-        if l < self.min_loss[event]:
-            self.min_loss[event] = l
-            self.perm[event] = torch.tensor(list(i))
+        for event in range(assignments.size(0)):
+            l = self.loss(assignments[event, list(i), :, :], assignments_labels[event])
+            if l < min_loss[event]:
+                min_loss[event] = l
+                perm[event] = torch.tensor(list(i))
 
+    batch_losses, batch_perms = min_loss.to(device), perm.long().to(device)
+    permuted_category = torch.gather(category, 1, batch_perms).to(device)
 
-    self.batch_losses, self.batch_perms = self.min_loss, self.perm.long()
-    self.permuted_category = torch.gather(category, 1, self.batch_perms)
+    assignments_loss = torch.mean(batch_losses)
+    category_loss = self.loss(permuted_category, category_labels)
 
-    self.assignments_loss = torch.mean(self.batch_losses)
-    self.category_loss = self.loss(self.permuted_category, category_labels)
-
-    return self.assignments_loss_weight * self.assignments_loss + self.categorizer_loss_weight * self.category_loss
+    return self.assignments_loss_weight * assignments_loss + self.categorizer_loss_weight * category_loss
