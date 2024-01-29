@@ -63,7 +63,7 @@ def main(options_file_path):
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
 
     tapte_lightning = TAPTELightning(options_file)
-    logger = TensorBoardLogger(save_dir=os.getcwd(), version=2, name="lightning_logs")
+    logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
     trainer = L.Trainer(devices=options_file["gpus"], accelerator="auto", max_epochs=options_file["epochs"], logger=logger)
     
     #Training:
