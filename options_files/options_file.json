@@ -4,7 +4,7 @@
     "num_of_workers" : 15,
     "batch_size" : 5,
     
-    "epochs" : 1,
+    "epochs" : 3,
     "gpus" : 1,
   
     "learning_rate" : 0.001,
