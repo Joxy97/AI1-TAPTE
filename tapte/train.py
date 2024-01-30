@@ -66,9 +66,9 @@ def main(options_file_path, manual_training=False):
 
         batch_size = options_file["batch_size"]
 
-        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=True)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
-        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
+        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, max_epochs=options_file["epochs"], num_workers=options_file["num_of_workers"], shuffle=True)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, max_epochs=options_file["epochs"], num_workers=options_file["num_of_workers"], shuffle=False)
+        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, max_epochs=options_file["epochs"], num_workers=options_file["num_of_workers"], shuffle=False)
 
         tapte_lightning = TAPTELightning(options_file)
         logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
