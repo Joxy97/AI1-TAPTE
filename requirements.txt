@@ -7,6 +7,7 @@ lightning
 tensorboard
 scikit-learn
 itertools
+tqdm
 awkward
 click
 uproot
