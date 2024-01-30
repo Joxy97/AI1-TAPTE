@@ -2,8 +2,10 @@ import numpy as np
 import math
 import os
 import h5py
+from tqdm import tqdm
 import json
 import sys
+import argparse
 
 import torch
 from torch import nn
@@ -20,7 +22,7 @@ from itertools import permutations
 from tapte.modules import *
 
 
-def main(options_file_path):
+def main(options_file_path, manual_training=False):
     
     #Load options_file:
     file_path = options_file_path
@@ -45,39 +47,99 @@ def main(options_file_path):
     
     
     #Setup training:  
-    data = Data(options_file, 1000)
+    data = Data(options_file, 1000, batching=manual_training)
 
-    train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
-        data.inputs, data.assignments, data.categories, test_size=1-options_file["training_size"], random_state=42)
+    if manual_training == False:
+      train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
+          data.inputs, data.assignments, data.categories, test_size=1-options_file["training_size"], random_state=42)
 
-    val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
-        temp_inputs, temp_assignments, temp_categories, test_size=0.5, random_state=42)
+      val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
+          temp_inputs, temp_assignments, temp_categories, test_size=0.5, random_state=42)
 
-    train_dataset = TAPTEDataset(train_inputs, train_assignments, train_categories)
-    val_dataset = TAPTEDataset(val_inputs, val_assignments, val_categories)
-    test_dataset = TAPTEDataset(test_inputs, test_assignments, test_categories)
+      train_dataset = TAPTEDataset(train_inputs, train_assignments, train_categories)
+      val_dataset = TAPTEDataset(val_inputs, val_assignments, val_categories)
+      test_dataset = TAPTEDataset(test_inputs, test_assignments, test_categories)
 
-    batch_size = options_file["batch_size"]
-    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=True)
-    val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
+      batch_size = options_file["batch_size"]
 
-    tapte_lightning = TAPTELightning(options_file)
-    logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
-    trainer = L.Trainer(devices=options_file["gpus"], accelerator="auto", max_epochs=options_file["epochs"], logger=logger)
-    
-    #Training:
-    trainer.fit(tapte_lightning, train_loader, val_loader)
+      train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=True)
+      val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
+      test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=options_file["num_of_workers"], shuffle=False)
+
+      tapte_lightning = TAPTELightning(options_file)
+      logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
+      trainer = L.Trainer(devices=options_file["gpus"], accelerator="auto", logger=logger)
+
+      trainer.fit(tapte_lightning, train_loader, val_loader)
+
+    else:
+      data.to_device(device)
+
+      train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
+          data.inputs, data.assignments, data.categories, test_size=1-options_file["training_size"], random_state=42)
+
+      val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
+          temp_inputs, temp_assignments, temp_categories, test_size=0.5, random_state=42)
+
+      train_inputs, train_assignments, train_categories = shuffle(
+          train_inputs, train_assignments, train_categories, random_state=42)
+
+      #val_inputs, val_assignments, val_categories = shuffle(
+          #val_inputs, val_assignments, val_categories, random_state=42)
+
+      #test_inputs, test_assignments, test_categories = shuffle(
+          #test_inputs, test_assignments, test_categories, random_state=42)
+      
+      tapte = TAPTE(options_file)
+      hsm_loss = HybridSymmetricLoss(options_file).to(device)
+      optimizer = optim.AdamW(tapte.parameters(), lr=options_file["learning_rate"])
+      
+      if torch.cuda.device_count() > 1:
+        tapte = nn.DataParallel(tapte, device_ids=gpu_indices)
+      tapte.to(device)
+      
+      for epoch in range(options_file["epochs"]):
+          # Training loop
+          tapte.train()
+          train_loss = 0.0
+      
+          # Wrap the iterable (range) with tqdm to create a progress bar
+          train_iterator = tqdm(range(train_inputs.size(0)), desc=f'Epoch {epoch + 1}/Training', unit='batch')          
+          for batch in train_iterator:
+              assignment, category = tapte(train_inputs[batch])
+              loss = hsm_loss(assignment, category, train_assignments[batch], train_categories[batch])
+              optimizer.zero_grad()
+              loss.backward()
+              optimizer.step()
+      
+              # Update the progress bar with the current loss
+              train_loss += loss.item()
+              avg_train_loss = train_loss / (batch + 1)
+              train_iterator.set_postfix(train_loss=avg_train_loss)
+      
+          # Validation loop
+          tapte.eval()
+          avg_val_loss = 0.0
+      
+          # Wrap the iterable (range) with tqdm to create a progress bar
+          val_iterator = tqdm(range(val_inputs.size(0)), desc=f'Epoch {epoch + 1}/Validation', unit='batch')        
+          for batch in val_iterator:
+              with torch.inference_mode():
+                  eval_assignment, eval_category = tapte(val_inputs[batch])
+                  eval_loss = hsm_loss(eval_assignment, eval_category, val_assignments[batch], val_categories[batch])
+      
+              # Update the progress bar with the current validation loss
+              avg_val_loss += eval_loss.item()
+              avg_val_loss /= (batch + 1)
+              val_iterator.set_postfix(val_loss=avg_val_loss)
+      
+          print(f'Epoch: {epoch}, Average Validation Loss: {avg_val_loss}')
 
 
 if __name__ == "__main__":
-    # Check if the script is run with the correct number of arguments
-    if len(sys.argv) != 2:
-        print("Usage: python train.py -options_file_path")
-        sys.exit(1)  # Exit with an error code
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('options_file_path', type=str, help='Path to the options file')
+    parser.add_argument('--manual_training', action='store_true', help='Enable manual training')
+    args = parser.parse_args()
 
-    # Extract command line arguments
-    arg1 = sys.argv[1]
-
-    # Call the main function with the arguments
-    main(arg1)
+    main(args.options_file_path, args.manual_training)
