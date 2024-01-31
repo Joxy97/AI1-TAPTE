@@ -1,5 +1,6 @@
 {
     "dataset" : "/home/jovan/Documents/PhD/AI1-TAPTE/dataset/Dataset.h5",
+    "optional_loading_size" : 1000
     "training_size" : 0.8,
     "num_of_workers" : 15,
     "batch_size" : 5,
