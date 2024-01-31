@@ -16,6 +16,16 @@ from sklearn.model_selection import train_test_split
 from itertools import permutations
 
 
+#UTILITIES
+
+def print_dict_as_table(input_dict):
+      table = PrettyTable(["Key", "Value"])
+      for key, value in input_dict.items():
+          table.add_row([key, value])
+      
+      print(table)
+
+
 #READ DATASET.H5 AND LOAD INTO TORCH TENSORS:
 
 def load_h5(options_file, size=None, batching=False):
@@ -337,6 +347,18 @@ class TAPTELightning(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.options_file["learning_rate"])
         return optimizer
+
+
+#CALLBACKS
+
+class PrintOptionsFileCallback(L.Callback):
+    def __init__(self, options_file):
+      super(PrintOptionsFileCallback, self).__init__()
+      self.options_file = options_file
+
+    def on_train_start(self, trainer, pl_module):
+        print("options_file content:")
+        print_dict_as_table(self.options_file)
 
 
 #LOSS FUNCTION
