@@ -54,6 +54,7 @@ def main(options_file_path, manual_training=False):
     data = Data(options_file, batching=manual_training)
 
     if manual_training == False:
+        #Setup Lightning training:
         dataset = TAPTEDataset(data.inputs, data.assignments, data.categories, split=options_file["split"])
 
         train_loader = DataLoader(dataset=dataset.train_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=True)
@@ -71,7 +72,7 @@ def main(options_file_path, manual_training=False):
 
 
     else:
-        #Setup:        
+        #Setup manual training:
         data.to_device(device)
 
         train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
