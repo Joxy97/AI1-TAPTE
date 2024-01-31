@@ -2,6 +2,7 @@ import numpy as np
 import math
 import os
 from tqdm import tqdm
+from prettytable import PrettyTable
 import h5py
 import json
 import sys
@@ -53,40 +54,29 @@ def main(options_file_path, manual_training=False):
     data = Data(options_file, batching=manual_training)
 
     if manual_training == False:
-        #Setup:
-        train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
-            data.inputs, data.assignments, data.categories, test_size=1-options_file["training_size"], random_state=42)
+        dataset = TAPTEDataset(data.inputs, data.assignments, data.categories, split=options_file["split"])
 
-        val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
-            temp_inputs, temp_assignments, temp_categories, test_size=0.5, random_state=42)
-
-        train_dataset = TAPTEDataset(train_inputs, train_assignments, train_categories)
-        val_dataset = TAPTEDataset(val_inputs, val_assignments, val_categories)
-        test_dataset = TAPTEDataset(test_inputs, test_assignments, test_categories)
-
-        batch_size = options_file["batch_size"]
-
-        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, max_epochs=options_file["epochs"], num_workers=options_file["num_of_workers"], shuffle=True)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, max_epochs=options_file["epochs"], num_workers=options_file["num_of_workers"], shuffle=False)
-        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, max_epochs=options_file["epochs"], num_workers=options_file["num_of_workers"], shuffle=False)
-
+        train_loader = DataLoader(dataset=dataset.train_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=True)
+        val_loader = DataLoader(dataset=dataset.val_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
+        test_loader = DataLoader(dataset=dataset.test_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
+        
         tapte_lightning = TAPTELightning(options_file)
         logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
-        trainer = L.Trainer(devices=options_file["gpus"], max_epoch=options_file["epochs"], accelerator="auto", logger=logger)
+        trainer = L.Trainer(devices=options_file["gpus"], accelerator="auto", logger=logger, callbacks=[PrintOptionsFileCallback(options_file=options_file)])
         
         #Training:
         trainer.fit(tapte_lightning, train_loader, val_loader)
 
 
     else:
-        #Setup:
+        #Setup:        
         data.to_device(device)
 
         train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
-            data.inputs, data.assignments, data.categories, test_size=1-options_file["training_size"], random_state=42)
+            data.inputs, data.assignments, data.categories, test_size=1-options_file["split"][0], random_state=42)
 
         val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
-            temp_inputs, temp_assignments, temp_categories, test_size=0.5, random_state=42)
+            temp_inputs, temp_assignments, temp_categories, test_size=options_file["split"][2]/(options_file["split"][1]+options_file["split"][2]), random_state=42)
 
         train_inputs, train_assignments, train_categories = shuffle(
             train_inputs, train_assignments, train_categories, random_state=42)
@@ -96,6 +86,11 @@ def main(options_file_path, manual_training=False):
 
         #test_inputs, test_assignments, test_categories = shuffle(
             #test_inputs, test_assignments, test_categories, random_state=42)
+
+        print(f'Number of GPUs detected on this device: {torch.cuda.device_count()}', end='\n')
+        print(f'Currently using GPUs: {gpu_indices}', end='\n')
+        print("Options:", end='\n')
+        print_dict_as_table(options_file)
 
         tapte = TAPTE(options_file)
         hsm_loss = HybridSymmetricLoss(options_file).to(device)
