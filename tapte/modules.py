@@ -2,6 +2,7 @@ import numpy as np
 import math
 import os
 import h5py
+from prettytable import PrettyTable
 
 import torch
 from torch import nn

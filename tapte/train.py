@@ -25,7 +25,7 @@ from itertools import permutations
 from tapte.modules import *
 
 
-def main(options_file_path, manual_training=False):
+def main(options_file_path, manual_training=False, checkpoint=None):
     
     #Load options_file:
     file_path = options_file_path
@@ -52,13 +52,25 @@ def main(options_file_path, manual_training=False):
     #Setup training:
     
     #Load data 
-    checkpoint = None
-
     data = Data(options_file, batching=manual_training)
+    
+    checkpoint = checkpoint
 
     if manual_training == False:
 
       outputs_directory = 'outputs'
+      
+      if checkpoint:
+          version = checkpoint
+          print(version)
+      else:
+          # Find the existing version folders and determine the next version number
+          existing_versions = [d for d in os.listdir(outputs_directory) if os.path.isdir(os.path.join(outputs_directory, d))]
+          next_version = 0 if not existing_versions else max([int(version.split('_')[1]) for version in existing_versions]) + 1
+
+          # Create the output directory for this run
+          version = f'version_{next_version}'
+          print(version)
 
       # Initialize dataset and data loaders
       data = Data(options_file, batching=manual_training)
@@ -71,12 +83,12 @@ def main(options_file_path, manual_training=False):
       tapte_lightning = TAPTELightning(options_file)
 
       # Create TensorBoardLogger
-      logger = TensorBoardLogger(save_dir="./", version=None, name=outputs_directory)
+      logger = TensorBoardLogger(save_dir="./", version=version, name=outputs_directory)
 
       # Create ModelCheckpoint callback
       checkpoint_callback = ModelCheckpoint(
-          dirpath=os.path.join(f'{outputs_directory}/{checkpoint}/checkpoints'),
-          filename="model_epoch_{epoch}",
+          dirpath=os.path.join(f'{outputs_directory}/{version}/checkpoints'),
+          filename="model_{epoch}",
           save_top_k=1,  # Save only the best model
           monitor="val_loss",  # Choose the metric to monitor
           mode="min",  # "min" for validation loss, "max" for validation accuracy
@@ -205,7 +217,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Your script description')
     parser.add_argument('options_file_path', type=str, help='Path to the options file')
     parser.add_argument('--manual_training', action='store_true', help='Enable manual training')
+    parser.add_argument('--checkpoint', type=str, help='Continue from the checkpoint')
 
     args = parser.parse_args()
 
-    main(args.options_file_path, args.manual_training)
+    main(args.options_file_path, args.manual_training, args.checkpoint)
