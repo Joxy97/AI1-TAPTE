@@ -79,9 +79,9 @@ def load_h5(options_file, size=None, batching=False):
     return inputs, assignments, categories
 
 class Data(nn.Module):                                              
-  def __init__(self, options_file, size=None, batching=False):
+  def __init__(self, options_file, batching=False):
     super().__init__()
-    self.size = size
+    self.size = options_file["optional_loading_size"]
     if batching == True:
       self.inputs, self.assignments, self.categories = load_h5(options_file, self.size, batching=batching)
     else:
