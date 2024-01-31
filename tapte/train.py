@@ -62,9 +62,11 @@ def main(options_file_path, manual_training=False):
         
         tapte_lightning = TAPTELightning(options_file)
         logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
-        trainer = L.Trainer(devices=options_file["gpus"], accelerator="auto", logger=logger, callbacks=[PrintOptionsFileCallback(options_file=options_file)])
-        
+        trainer = L.Trainer(devices=options_file["gpus"], max_epochs=options_file["epochs"], accelerator="auto", logger=logger)
+    
         #Training:
+        print("Options:", end='\n')
+        print_dict_as_table(options_file)
         trainer.fit(tapte_lightning, train_loader, val_loader)
 
 
