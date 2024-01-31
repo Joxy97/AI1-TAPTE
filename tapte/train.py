@@ -72,7 +72,7 @@ def main(options_file_path, manual_training=False):
 
         tapte_lightning = TAPTELightning(options_file)
         logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
-        trainer = L.Trainer(devices=options_file["gpus"], accelerator="auto", logger=logger)
+        trainer = L.Trainer(devices=options_file["gpus"], max_epoch=options_file["epochs"], accelerator="auto", logger=logger)
         
         #Training:
         trainer.fit(tapte_lightning, train_loader, val_loader)
