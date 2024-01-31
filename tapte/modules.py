@@ -7,7 +7,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -99,10 +99,24 @@ class Data(nn.Module):
 #CREATE TORCH DATASET BASED ON LOADED DATA
 
 class TAPTEDataset(Dataset):
-    def __init__(self, _inputs, _assignments, _categories):
+    def __init__(self, _inputs, _assignments, _categories, split=[0.8, 0.1, 0.1]):
+        # Ensure the split ratios sum to 1
+        assert sum(split) == 1.0, "Split ratios should sum to 1.0"
+
         self.inputs = _inputs
         self.assignments = _assignments
         self.categories = _categories
+
+        # Calculate split sizes
+        total_samples = len(self.inputs)
+        train_size = int(split[0] * total_samples)
+        val_size = int(split[1] * total_samples)
+        test_size = total_samples - train_size - val_size
+
+        # Use random_split to split the dataset
+        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
+            self, [train_size, val_size, test_size]
+        )
 
     def __len__(self):
         return len(self.inputs)
