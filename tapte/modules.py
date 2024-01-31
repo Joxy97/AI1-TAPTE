@@ -19,53 +19,64 @@ from itertools import permutations
 #READ DATASET.H5 AND LOAD INTO TORCH TENSORS:
 
 def load_h5(options_file, size=None, batching=False):
-
-    file = h5py.File(options_file[f"dataset"], 'r+')
-    batch_size = options_file["batch_size"]
-    jets_vars = options_file["variables"]
-    resonant_particles = list(options_file["event_topology"].keys())
-    num_of_particles = len(resonant_particles)
-
-    if size == None:
-      num_of_events = len(file["INPUTS"]["Jets"][jets_vars[0]])
-    else:
+  
+  with h5py.File(options_file[f"dataset"], 'r+') as file:
+    if size != None:
       num_of_events = size
-    num_of_jets = options_file["num_of_jets"]
-    num_of_variables = len(jets_vars)
+    else:
+      num_of_events = len(h1_data["mask"])
 
-    input = torch.empty(num_of_events, num_of_jets, num_of_variables)
-    targets = torch.empty(num_of_events, num_of_particles, num_of_jets, num_of_jets)
-    categories = torch.empty(num_of_events, num_of_particles)
+    #Load inputs:
+    variables = options_file["variables"]
 
-    for i in range(num_of_events):
-      event = torch.empty(num_of_variables, num_of_jets)
-      j = 0
-      for variable in jets_vars:
-        event[j] = torch.from_numpy(file["INPUTS"]["Jets"][variable][0])
-        j = j + 1
-      event = torch.transpose(event, 1, 0)
-      input[i] = event
+    inputs_list = []
+    assignments_list = []
 
-      event_targets = torch.zeros(num_of_particles, num_of_jets, num_of_jets)
-      event_category = torch.zeros(num_of_particles)
-      for particle in range(num_of_particles):
-        indices = []
-        for parton in range(len(options_file["event_topology"][resonant_particles[particle]])):
-          indices.append(file["TARGETS"][resonant_particles[particle]][options_file["event_topology"][resonant_particles[particle]][parton]][i])
-        if -1 not in indices:
-          event_category[particle] = 1
-          event_targets[particle][indices[0]][indices[1]] = 1
-          event_targets[particle][indices[1]][indices[0]] = 1
-      targets[i] = event_targets
-      categories[i] = event_category
+    for variable in variables:
+        inputs_list.append(file[f'INPUTS/Jets/{variable}'][:size])
+    inputs_array = np.array(inputs_list)
+    inputs = torch.permute(torch.tensor(inputs_array), (1, 2, 0)).to(torch.float)
+
+    #Load assignments:
+    h1_data = file['TARGETS']['h1']
+    h2_data = file['TARGETS']['h2']
+    h3_data = file['TARGETS']['h3']
+
+    assignments = np.zeros((num_of_events, 3, 10, 10), dtype=np.float32)
+
+    mask_h1 = h1_data['mask'][:size].astype(np.float32)
+    h1_exists = np.where(mask_h1 == 1)
+    mask_h2 = h2_data['mask'][:size].astype(np.float32)
+    h2_exists = np.where(mask_h2 == 1)
+    mask_h3 = h3_data['mask'][:size].astype(np.float32)
+    h3_exists = np.where(mask_h3 == 1)
+
+    indices_h1 = np.stack([h1_data['b1'][h1_exists], h1_data['b2'][h1_exists]])
+    indices_h2 = np.stack([h2_data['b1'][h2_exists], h2_data['b2'][h2_exists]])
+    indices_h3 = np.stack([h3_data['b1'][h3_exists], h3_data['b2'][h3_exists]])
+
+    perm_indices_h1 = list(permutations(indices_h1))
+    perm_indices_h2 = list(permutations(indices_h2))
+    perm_indices_h3 = list(permutations(indices_h3))
+
+    assignments[h1_exists, 0, perm_indices_h1[0], perm_indices_h1[1]] = 1
+    assignments[h2_exists, 1, perm_indices_h2[0], perm_indices_h2[1]] = 1
+    assignments[h3_exists, 2, perm_indices_h3[0], perm_indices_h3[1]] = 1
+
+    assignments = torch.tensor(assignments).to(torch.float)
+
+    #Load categories:
+    categories = np.array([mask_h1, mask_h2, mask_h3])
+    categories = torch.permute(torch.tensor(categories), (1, 0)).to(torch.float)
 
     if batching == True:
+      batch_size = options_file["batch_size"]
       num_of_batches = int(num_of_events/batch_size)
-      input = torch.reshape(input[:(num_of_batches * batch_size)], (num_of_batches, batch_size, num_of_jets, num_of_variables))
-      targets = torch.reshape(targets[:(num_of_batches * batch_size)], (num_of_batches, batch_size, num_of_particles, num_of_jets, num_of_jets))
-      categories = torch.reshape(categories[:(num_of_batches * batch_size)], (num_of_batches, batch_size, num_of_particles))
+      inputs = torch.reshape(inputs[:(num_of_batches * batch_size)], (num_of_batches, batch_size, inputs.size(1), inputs.size(2)))
+      assignments = torch.reshape(assignments[:(num_of_batches * batch_size)], (num_of_batches, batch_size, assignments.size(1), assignments.size(2), assignments.size(3)))
+      categories = torch.reshape(categories[:(num_of_batches * batch_size)], (num_of_batches, batch_size, categories.size(1)))
 
-    return input, targets, categories
+    return inputs, assignments, categories
 
 class Data(nn.Module):                                              
   def __init__(self, options_file, size=None, batching=False):
