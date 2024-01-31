@@ -50,7 +50,7 @@ def main(options_file_path, manual_training=False):
     #Setup training:
     
     #Load data 
-    data = Data(options_file, 1000, batching=manual_training)
+    data = Data(options_file, batching=manual_training)
 
     if manual_training == False:
         #Setup:
