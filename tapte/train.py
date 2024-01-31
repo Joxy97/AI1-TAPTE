@@ -15,6 +15,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 import lightning as L
+from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from sklearn.model_selection import train_test_split
@@ -51,93 +52,152 @@ def main(options_file_path, manual_training=False):
     #Setup training:
     
     #Load data 
+    checkpoint = None
+
     data = Data(options_file, batching=manual_training)
 
     if manual_training == False:
-        #Setup Lightning training:
-        dataset = TAPTEDataset(data.inputs, data.assignments, data.categories, split=options_file["split"])
 
-        train_loader = DataLoader(dataset=dataset.train_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=True)
-        val_loader = DataLoader(dataset=dataset.val_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
-        test_loader = DataLoader(dataset=dataset.test_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
-        
-        tapte_lightning = TAPTELightning(options_file)
-        logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name="lightning_logs")
-        trainer = L.Trainer(devices=options_file["gpus"], max_epochs=options_file["epochs"], accelerator="auto", logger=logger)
-    
-        #Training:
-        print("Options:", end='\n')
-        print_dict_as_table(options_file)
-        trainer.fit(tapte_lightning, train_loader, val_loader)
+      outputs_directory = 'outputs'
+
+      # Initialize dataset and data loaders
+      data = Data(options_file, batching=manual_training)
+      dataset = TAPTEDataset(data.inputs, data.assignments, data.categories, split=options_file["split"])
+      train_loader = DataLoader(dataset=dataset.train_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=True)
+      val_loader = DataLoader(dataset=dataset.val_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
+      test_loader = DataLoader(dataset=dataset.test_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
+
+      # Initialize LightningModule
+      tapte_lightning = TAPTELightning(options_file)
+
+      # Create TensorBoardLogger
+      logger = TensorBoardLogger(save_dir="./", version=None, name=outputs_directory)
+
+      # Create ModelCheckpoint callback
+      checkpoint_callback = ModelCheckpoint(
+          dirpath=os.path.join(f'{outputs_directory}/{checkpoint}/checkpoints'),
+          filename="model_epoch_{epoch}",
+          save_top_k=1,  # Save only the best model
+          monitor="val_loss",  # Choose the metric to monitor
+          mode="min",  # "min" for validation loss, "max" for validation accuracy
+          save_last=True,  # Save the last checkpoint
+          verbose=True,
+      )
+
+      # Initialize Lightning Trainer
+      trainer = L.Trainer(
+        max_epochs=options_file["epochs"],
+        devices=options_file["gpus"],
+        accelerator="auto",
+        logger=logger,
+        callbacks=[checkpoint_callback],  # Use the callback from pytorch_lightning
+    )
+
+      # Start training
+      print("Options:", end='\n')
+      print_dict_as_table(options_file)
+      trainer.fit(tapte_lightning, train_loader, val_loader)
 
 
     else:
-        #Setup manual training:
-        data.to_device(device)
+      #Setup:        
+      data.to_device(device)
 
-        train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
-            data.inputs, data.assignments, data.categories, test_size=1-options_file["split"][0], random_state=42)
+      train_inputs, temp_inputs, train_assignments, temp_assignments, train_categories, temp_categories = train_test_split(
+          data.inputs, data.assignments, data.categories, test_size=1-options_file["split"][0], random_state=42)
 
-        val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
-            temp_inputs, temp_assignments, temp_categories, test_size=options_file["split"][2]/(options_file["split"][1]+options_file["split"][2]), random_state=42)
+      val_inputs, test_inputs, val_assignments, test_assignments, val_categories, test_categories = train_test_split(
+          temp_inputs, temp_assignments, temp_categories, test_size=options_file["split"][2]/(options_file["split"][1]+options_file["split"][2]), random_state=42)
 
-        train_inputs, train_assignments, train_categories = shuffle(
-            train_inputs, train_assignments, train_categories, random_state=42)
+      train_inputs, train_assignments, train_categories = shuffle(
+          train_inputs, train_assignments, train_categories, random_state=42)
 
-        #val_inputs, val_assignments, val_categories = shuffle(
-            #val_inputs, val_assignments, val_categories, random_state=42)
+      outputs_directory = 'outputs'
+      os.makedirs(outputs_directory, exist_ok=True)
 
-        #test_inputs, test_assignments, test_categories = shuffle(
-            #test_inputs, test_assignments, test_categories, random_state=42)
+      if checkpoint:
+          output_directory = os.path.join(outputs_directory, checkpoint)
+      else:
+          # Find the existing version folders and determine the next version number
+          existing_versions = [d for d in os.listdir(outputs_directory) if os.path.isdir(os.path.join(outputs_directory, d))]
+          next_version = 1 if not existing_versions else max([int(version.split('_')[1]) for version in existing_versions]) + 1
 
-        print(f'Number of GPUs detected on this device: {torch.cuda.device_count()}', end='\n')
-        print(f'Currently using GPUs: {gpu_indices}', end='\n')
-        print("Options:", end='\n')
-        print_dict_as_table(options_file)
+          # Create the output directory for this run
+          output_directory = os.path.join(outputs_directory, f'version_{next_version}')
+          os.makedirs(output_directory, exist_ok=True)
+          print(f'version_{next_version}')
 
-        tapte = TAPTE(options_file)
-        hsm_loss = HybridSymmetricLoss(options_file).to(device)
-        optimizer = optim.AdamW(tapte.parameters(), lr=options_file["learning_rate"])
+      # Initialize model, loss function, and optimizer
+      tapte = TAPTE(options_file)
+      hsm_loss = HybridSymmetricLoss(options_file).to(device)
+      optimizer = optim.AdamW(tapte.parameters(), lr=options_file["learning_rate"])
 
-        if torch.cuda.device_count() > 1:
+      # Check for existing checkpoints in the version folder
+      existing_checkpoints = [f for f in os.listdir(output_directory) if f.startswith('model_epoch_')]
+      start_epoch = 0
+
+      # If checkpoints exist, load the latest checkpoint
+      if existing_checkpoints:
+          latest_checkpoint = max(existing_checkpoints, key=lambda x: int(x.split('_')[2].split('.')[0]))
+          checkpoint_path = os.path.join(output_directory, latest_checkpoint)
+          tapte.load_state_dict(torch.load(checkpoint_path))
+          start_epoch = int(latest_checkpoint.split('_')[2].split('.')[0]) + 1
+          print(checkpoint)
+          print(f"Resuming training from epoch {start_epoch}")
+
+      if torch.cuda.device_count() > 1:
           tapte = nn.DataParallel(tapte, device_ids=gpu_indices)
-        tapte.to(device)
+      tapte.to(device)
 
-        #Training:
-        for epoch in range(options_file["epochs"]):
-            tapte.train()
-            train_loss = 0.0
+      print(f'Number of GPUs detected on this device: {torch.cuda.device_count()}', end='\n')
+      print(f'Currently using GPUs: {gpu_indices}', end='\n')
+      print("Options:", end='\n')
+      print_dict_as_table(options_file)
 
-            train_iterator = tqdm(range(train_inputs.size(0)), desc=f'Epoch {epoch + 1} training', unit='batch')
+      #Training:
+      for epoch in range(start_epoch, options_file["epochs"]):
+          tapte.train()
+          train_loss = 0.0
 
-            for batch in train_iterator:
-                assignment, category = tapte(train_inputs[batch])
-                loss = hsm_loss(assignment, category, train_assignments[batch], train_categories[batch])
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+          train_iterator = tqdm(range(train_inputs.size(0)), desc=f'Epoch {epoch} training', unit='batch')
 
-                train_loss += loss.item()
-                avg_train_loss = train_loss / (batch + 1)
-                train_iterator.set_postfix(train_loss=avg_train_loss)
+          for batch in train_iterator:
+              assignment, category = tapte(train_inputs[batch])
+              loss = hsm_loss(assignment, category, train_assignments[batch], train_categories[batch])
+              optimizer.zero_grad()
+              loss.backward()
+              optimizer.step()
 
-            tapte.eval()
-            avg_val_loss = 0.0
+              train_loss += loss.item()
+              avg_train_loss = train_loss / (batch + 1)
+              train_iterator.set_postfix(train_loss=avg_train_loss)
 
-            val_iterator = tqdm(range(val_inputs.size(0)), desc=f'Epoch {epoch + 1} validation', unit='batch')
+          tapte.eval()
+          avg_val_loss = 0.0
 
-            for batch in val_iterator:
-                with torch.inference_mode():
-                    eval_assignment, eval_category = tapte(val_inputs[batch])
-                    eval_loss = hsm_loss(eval_assignment, eval_category, val_assignments[batch], val_categories[batch])
+          val_iterator = tqdm(range(val_inputs.size(0)), desc=f'Epoch {epoch} validation', unit='batch')
 
-                avg_val_loss += eval_loss.item()
-                avg_val_loss /= (batch + 1)
-                val_iterator.set_postfix(val_loss=avg_val_loss)
+          for batch in val_iterator:
+              with torch.inference_mode():
+                  eval_assignment, eval_category = tapte(val_inputs[batch])
+                  eval_loss = hsm_loss(eval_assignment, eval_category, val_assignments[batch], val_categories[batch])
 
-            print(f'Epoch: {epoch + 1}, Average Validation Loss: {avg_val_loss}')
-        
-        print(f'Max number of {options_file["epochs"]} epochs reached!')
+              avg_val_loss += eval_loss.item()
+
+          avg_val_loss /= (batch + 1)
+          val_iterator.set_postfix(val_loss=avg_val_loss)
+
+          print(f'Epoch: {epoch}, Average Validation Loss: {avg_val_loss}')
+
+          save_path = os.path.join(output_directory, f'model_epoch_{epoch}.pth')
+          torch.save(tapte.state_dict(), save_path)
+
+          if epoch > 0:
+            previous_epoch_path = os.path.join(output_directory, f'model_epoch_{epoch - 1}.pth')
+            if os.path.exists(previous_epoch_path):
+              os.remove(previous_epoch_path)
+
+      print(f'Max number of {options_file["epochs"]} epochs reached!')
             
 
 if __name__ == "__main__":
