@@ -18,6 +18,18 @@ from itertools import permutations
 
 #UTILITIES
 
+def create_or_load_version_directory(base_dir, checkpoint):
+    if checkpoint:
+        version_dir = os.path.join(base_dir, checkpoint)
+    else:
+        existing_versions = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
+        next_version = 1 if not existing_versions else max([int(version.split('_')[1]) for version in existing_versions]) + 1
+        version_dir = os.path.join(base_dir, f'version_{next_version}')
+        os.makedirs(version_dir, exist_ok=True)
+        print(f'version_{next_version}')
+
+    return version_dir
+
 def print_dict_as_table(input_dict):
       table = PrettyTable(["Key", "Value"])
       for key, value in input_dict.items():
@@ -329,9 +341,11 @@ class TAPTELightning(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+          
         inputs, assignment_labels, category_labels = batch
         assignment_preds, category_preds = self.model(inputs)
         loss = self.loss_function(assignment_preds, category_preds, assignment_labels, category_labels)
+        self.log('val_loss', loss, prog_bar=True, logger=True)
         return loss
 
     def test_step(self, batch, batch_idx):
