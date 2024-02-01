@@ -268,24 +268,24 @@ class Categorizer(nn.Module):
         # First linear layer
         self.first_layer = nn.Linear(options_file["num_of_jets"] * options_file["model_dim"], self.first_layer_size)
 
-        # Hidden layers
+        # Hidden layers with batch normalization
         layers = []
         for i in range(self.num_of_layers - 1):
             layers.append(nn.Linear(round(self.first_layer_size - i * self.step), round(self.first_layer_size - (i + 1) * self.step)))
+            layers.append(nn.BatchNorm1d(round(self.first_layer_size - (i + 1) * self.step)))
             if i != self.num_of_layers - 2:
-              layers.append(nn.GELU())
-            else:
-              layers.append(nn.Sigmoid())
+                layers.append(nn.GELU())
 
         self.hidden_layers = nn.Sequential(*layers)
 
     def forward(self, input):
-      x = input.view(input.size(0), -1)
-      x = nn.functional.gelu(self.first_layer(x))
-      x = self.hidden_layers(x)
-      #x = x.ge(self.threshold).float()
+        x = input.view(input.size(0), -1)
+        x = self.first_layer(x)
+        x = nn.GELU()(x)
+        x = self.hidden_layers(x)
+        x = nn.Sigmoid()(x)
 
-      return x
+        return x
 
 
 class ParticlePass(nn.Module):
