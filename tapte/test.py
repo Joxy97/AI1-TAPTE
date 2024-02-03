@@ -25,7 +25,7 @@ from itertools import permutations
 from tapte.modules import *
 
 
-def main(options_file_path, checkpoint=None):
+def main(options_file_path, model_to_test):
     
     # Load options_file:
     file_path = options_file_path
@@ -48,56 +48,36 @@ def main(options_file_path, checkpoint=None):
     else:
       gpu_indices = None
     
-    # Setup training:
-
-    outputs_directory = 'outputs'
+    # Setup testing:
 
     # Initialize dataset
-    train_dataset = TAPTEDataset(options_file, split='train')
-    val_dataset = TAPTEDataset(options_file, split='val')
-
-    train_loader = DataLoader(dataset=train_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=True)
-    val_loader = DataLoader(dataset=val_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
+    test_dataset = TAPTEDataset(options_file, split='test')
+    test_loader = DataLoader(dataset=test_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
 
     # Initialize LightningModule
     tapte = TAPTE(options_file)
+    #state_dict = torch.load(f"output/{version}/checkpoints/epoch_{epoch}.pth")
+    #tapte.load_state_dict(state_dict)
+
     tapte_lightning = TAPTELightning(options_file, tapte)
 
-    # Create TensorBoardLogger
-    logger = TensorBoardLogger(save_dir="./", version=None, name=outputs_directory)
+    # Initialize Lightning Tester
+    tester = L.Trainer(
+    max_epochs=1,
+    devices=options_file["gpus"],
+    accelerator="auto"
+)
 
-    # Create ModelCheckpoint callback
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=os.path.join(f'{outputs_directory}/{checkpoint}/checkpoints'),
-        filename="model_epoch_{epoch}",
-        save_top_k=1,  # Save only the best model
-        monitor="val_loss",  # Choose the metric to monitor
-        mode="min",  # "min" for validation loss, "max" for validation accuracy
-        save_last=True,  # Save the last checkpoint
-        verbose=True,
-    )
-
-    # Initialize Lightning Trainer
-    trainer = L.Trainer(
-      max_epochs=options_file["epochs"],
-      devices=options_file["gpus"],
-      accelerator="auto",
-      logger=logger,
-      callbacks=[checkpoint_callback],
-)   
-
-    # Start training
-    print("Options:", end='\n')
-    print_dict_as_table(options_file)
-    trainer.fit(tapte_lightning, train_loader, val_loader)
+    # Start testing
+    tester.test(tapte_lightning, test_loader)
 
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='Your script description')
     parser.add_argument('options_file_path', type=str, help='Path to the options file')
-    parser.add_argument('--checkpoint', type=str, help='Continue from the checkpoint')
+    parser.add_argument('--model_to_test', type=str, help='Choose which model to test')
 
     args = parser.parse_args()
 
-    main(args.options_file_path, args.checkpoint)
+    main(args.options_file_path, args.model_to_test)

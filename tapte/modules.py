@@ -39,11 +39,19 @@ def print_dict_as_table(input_dict):
       
       print(table)
 
+def print_h5_tree(group, indent=0):
+    for name, item in group.items():
+        if isinstance(item, h5py.Group):
+            print("  " * indent + f"Group: {name}")
+            print_h5_tree(item, indent + 1)
+        elif isinstance(item, h5py.Dataset):
+            print("  " * indent + f"Dataset: {name} (Shape: {item.shape}, Dtype: {item.dtype})")
+
 
 #READ DATASET.H5 AND LOAD INTO TORCH TENSORS:
 
 def load_h5(options_file, size=None, batching=False):
-  
+
   with h5py.File(options_file[f"dataset"], 'r+') as file:
     if size != None:
       num_of_events = size
@@ -54,7 +62,6 @@ def load_h5(options_file, size=None, batching=False):
     variables = options_file["variables"]
 
     inputs_list = []
-    assignments_list = []
 
     for variable in variables:
         inputs_list.append(file[f'INPUTS/Jets/{variable}'][:size])
@@ -102,7 +109,7 @@ def load_h5(options_file, size=None, batching=False):
 
     return inputs, assignments, categories
 
-class Data(nn.Module):                                              
+class Data(nn.Module):
   def __init__(self, options_file, batching=False):
     super().__init__()
     self.size = options_file["optional_loading_size"]
@@ -123,32 +130,74 @@ class Data(nn.Module):
 #CREATE TORCH DATASET BASED ON LOADED DATA
 
 class TAPTEDataset(Dataset):
-    def __init__(self, _inputs, _assignments, _categories, split=[0.8, 0.1, 0.1]):
-        # Ensure the split ratios sum to 1
-        assert sum(split) == 1.0, "Split ratios should sum to 1.0"
+    def __init__(self, options_file, split='train'):
+        self.file_path = options_file["dataset"]
+        self.size = options_file["optional_loading_size"]
+        self.split_ratios = options_file["split"]
+        assert sum(self.split_ratios) == 1.0, "Split ratios should sum up to 1.0"
+        assert len(self.split_ratios) == 3, "Split requires three values corresponding to training, validation and testing ratios respectfully"
 
-        self.inputs = _inputs
-        self.assignments = _assignments
-        self.categories = _categories
+        self.variables = options_file["variables"]
 
-        # Calculate split sizes
-        total_samples = len(self.inputs)
-        train_size = int(split[0] * total_samples)
-        val_size = int(split[1] * total_samples)
-        test_size = total_samples - train_size - val_size
+        train_size, val_size, test_size = self.split_ratios
 
-        # Use random_split to split the dataset
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            self, [train_size, val_size, test_size]
-        )
+        with h5py.File(self.file_path, 'r') as file:
+          if self.size is None:
+            all_indices = list(range(len(file['TARGETS/h1/mask'])))
+          else:
+            all_indices = list(range(self.size))
+
+          if split == 'train':
+              self.indices = all_indices[:int(train_size * len(all_indices))]
+          elif split == 'val':
+              self.indices = all_indices[int(train_size * len(all_indices)):int((train_size + val_size) * len(all_indices))]
+          elif split == 'test':
+              self.indices = all_indices[int((1 - test_size) * len(all_indices)):]
+          else:
+              raise ValueError("Invalid split parameter. Use 'train', 'val', or 'test'.")
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.indices)
 
     def __getitem__(self, index):
-        input = self.inputs[index]
-        assignment = self.assignments[index]
-        category = self.categories[index]
+      with h5py.File(self.file_path, 'r') as self.file:
+        actual_index = self.indices[index]
+
+        # Load inputs
+        input = []
+        for variable in self.variables:
+            input.append(self.file[f'INPUTS/Jets/{variable}'][actual_index])
+
+        input = np.array(input, dtype=np.float32)
+        input = torch.tensor(input, dtype=torch.float).permute(1, 0)
+
+        # Load assignments
+        h1_data = self.file['TARGETS']['h1']
+        h2_data = self.file['TARGETS']['h2']
+        h3_data = self.file['TARGETS']['h3']
+
+        indices_h1 = [self.file['TARGETS']['h1']['b1'][actual_index], self.file['TARGETS']['h1']['b2'][actual_index]]
+        indices_h2 = [self.file['TARGETS']['h2']['b1'][actual_index], self.file['TARGETS']['h2']['b2'][actual_index]]
+        indices_h3 = [self.file['TARGETS']['h3']['b1'][actual_index], self.file['TARGETS']['h3']['b2'][actual_index]]
+
+        perm_indices_h1 = list(permutations(indices_h1))
+        perm_indices_h2 = list(permutations(indices_h2))
+        perm_indices_h3 = list(permutations(indices_h3))
+
+        assignment = np.zeros((3, 10, 10), dtype=np.float32)
+
+        if -1 not in indices_h1: assignment[0, perm_indices_h1[0], perm_indices_h1[1]] = 1
+        if -1 not in indices_h2: assignment[1, perm_indices_h2[0], perm_indices_h2[1]] = 1
+        if -1 not in indices_h3: assignment[2, perm_indices_h3[0], perm_indices_h3[1]] = 1
+
+        assignment = torch.tensor(assignment, dtype=torch.float)
+
+        # Load categories
+        mask_h1 = h1_data['mask'][actual_index].astype(np.float32)
+        mask_h2 = h2_data['mask'][actual_index].astype(np.float32)
+        mask_h3 = h3_data['mask'][actual_index].astype(np.float32)
+
+        category = torch.tensor([mask_h1, mask_h2, mask_h3], dtype=torch.float)
 
         return input, assignment, category
     
@@ -272,7 +321,7 @@ class Categorizer(nn.Module):
         layers = []
         for i in range(self.num_of_layers - 1):
             layers.append(nn.Linear(round(self.first_layer_size - i * self.step), round(self.first_layer_size - (i + 1) * self.step)))
-            layers.append(nn.BatchNorm1d(round(self.first_layer_size - (i + 1) * self.step)))
+            layers.append(nn.BatchNorm1d(round(self.first_layer_size - (i + 1) * self.step), track_running_stats=False))
             if i != self.num_of_layers - 2:
                 layers.append(nn.GELU())
 
@@ -306,13 +355,13 @@ class ParticlePass(nn.Module):
 class TAPTE(nn.Module):
   def __init__(self, options_file):
     super(TAPTE, self).__init__()
+    self.options_file = options_file
     self.num_of_particles = len(options_file["event_topology"])
     self.initial_embedding = InitialEmbedding(options_file)
     self.central_encoder = CentralEncoder(options_file)
     self.categorizer = Categorizer(options_file)
     self.particle_passes = nn.ModuleList([ParticlePass(options_file) for i in range(self.num_of_particles)])
     self.threshold = options_file["categorization_threshold"]
-    self.options_file = options_file
 
   def forward(self, input):
     x = self.initial_embedding(input)
@@ -323,16 +372,16 @@ class TAPTE(nn.Module):
     self.encodings = torch.stack([particles[i][0] for i in range(self.num_of_particles)], dim=0)
 
     self.categories = self.categorizer(torch.mean(self.encodings, dim=0))
-    mask = self.categories.ge(self.threshold).float()
 
+    mask = self.categories.ge(self.threshold).float()
     self.assignments = self.assignments * mask.view(self.options_file["batch_size"], self.num_of_particles, 1, 1)
 
     return self.assignments, self.categories
 
 class TAPTELightning(L.LightningModule):
-    def __init__(self, options_file):
+    def __init__(self, options_file, model):
         super(TAPTELightning, self).__init__()
-        self.model = TAPTE(options_file)
+        self.model = model
         self.loss_function = HybridSymmetricLoss(options_file)
         self.options_file = options_file
 
@@ -343,7 +392,6 @@ class TAPTELightning(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-          
         inputs, assignment_labels, category_labels = batch
         assignment_preds, category_preds = self.model(inputs)
         loss = self.loss_function(assignment_preds, category_preds, assignment_labels, category_labels)
@@ -351,14 +399,14 @@ class TAPTELightning(L.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
+        self.loss_function.inference = True
         inputs, assignment_labels, category_labels = batch
         assignment_preds, category_preds = self.model(inputs)
         loss = self.loss_function(assignment_preds, category_preds, assignment_labels, category_labels)
         return loss
 
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack(outputs).mean()
-        return {'test_loss': avg_loss}
+    def on_test_epoch_end(self):
+        self.loss_function.print_results()
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.options_file["learning_rate"])
@@ -379,6 +427,32 @@ class PrintOptionsFileCallback(L.Callback):
 
 #LOSS FUNCTION
 
+def one_hot_encode(input):
+  if torch.any(input != 0):
+    max_value = input.view(-1).max()
+    max_indices = torch.nonzero(input == max_value)
+
+    pick_indices = []
+    for i in range(max_indices.size(1)):
+      pick_indices.append(max_indices[:, i])
+
+    one_hot_encoded = torch.zeros_like(input)
+    one_hot_encoded[pick_indices] = 1
+
+    return one_hot_encoded
+
+  else:
+    return input
+
+def count_correct_Higgs(X, Y):
+
+  X_set = {tuple(matrix.flatten().detach().cpu().numpy()) for matrix in X if torch.any(matrix != 0)}
+  Y_set = {tuple(matrix.flatten().detach().cpu().numpy()) for matrix in Y}
+
+  count = sum(matrix in Y_set for matrix in X_set)
+
+  return count
+
 class HybridSymmetricLoss(nn.Module):
   def __init__(self, options_file):
     super(HybridSymmetricLoss, self).__init__()
@@ -386,12 +460,19 @@ class HybridSymmetricLoss(nn.Module):
     self.assignments_loss_weight = options_file["assignments_loss_weight"]
     self.categorizer_loss_weight = options_file["categorizer_loss_weight"]
 
+    self.inference = False
+    self.num_of_categories = torch.zeros(len(options_file["event_topology"]) + 1)
+    self.confusion_matrix = torch.zeros(2, self.num_of_categories.size(0), self.num_of_categories.size(0))
+
+  def print_results(self):
+    print(self.confusion_matrix)
+
   def forward(self, assignments, category, assignments_labels, category_labels):
     device = assignments.device
     indices = torch.arange(assignments.size(1))
     min_loss = torch.ones(assignments.size(0)) * float('inf')
     perm = torch.empty(assignments.size(0), assignments.size(1))
-        
+
     for i in permutations(indices):
         for event in range(assignments.size(0)):
             l = self.loss(assignments[event, list(i), :, :], assignments_labels[event])
@@ -400,9 +481,35 @@ class HybridSymmetricLoss(nn.Module):
                 perm[event] = torch.tensor(list(i))
 
     batch_losses, batch_perms = min_loss.to(device), perm.long().to(device)
+
+    permuted_assignments = assignments.clone()
+    for i in range(permuted_assignments.size(0)):
+      permuted_matrices = permuted_assignments[i, batch_perms[i]]
+
+      # Update the original tensor with permuted matrices
+      permuted_assignments[i] = permuted_matrices
+
     permuted_category = torch.gather(category, 1, batch_perms).to(device)
 
     assignments_loss = torch.mean(batch_losses)
     category_loss = self.loss(permuted_category, category_labels)
+
+    #Update results:
+
+    if self.inference == True:
+
+      for i in range(permuted_assignments.size(0)):
+        for j in range(permuted_assignments.size(1)):
+          permuted_assignments[i][j] = one_hot_encode(permuted_assignments[i][j])
+
+      permuted_category = permuted_category.ge(0.5).float()
+
+      labels = torch.sum(category_labels, dim=1).long()
+      predicted_labels = torch.sum(permuted_category, dim=1).long()
+
+      for k in range(labels.size(0)):
+        self.num_of_categories[labels[k]] += 1
+        self.confusion_matrix[0, labels[k], predicted_labels[k]] += 1
+        self.confusion_matrix[1, labels[k], predicted_labels[k]] += count_correct_Higgs(permuted_assignments[k], assignments_labels[k])
 
     return self.assignments_loss_weight * assignments_loss + self.categorizer_loss_weight * category_loss
