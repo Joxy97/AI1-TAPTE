@@ -50,8 +50,6 @@ def main(options_file_path, checkpoint=None):
     
     # Setup training:
 
-    outputs_directory = 'outputs'
-
     # Initialize dataset
     train_dataset = TAPTEDataset(options_file, split='train')
     val_dataset = TAPTEDataset(options_file, split='val')
@@ -63,13 +61,34 @@ def main(options_file_path, checkpoint=None):
     tapte = TAPTE(options_file)
     tapte_lightning = TAPTELightning(options_file, tapte)
 
+    # Setup output folders
+    outputs_folder = 'outputs'
+    existing_versions = []
+    if outputs_folder in os.listdir("./"):
+      existing_versions = [d for d in os.listdir(outputs_folder) if d.startswith('version_')]
+      latest_version = max([0] + [int(version.split('_')[1]) for version in existing_versions], default=-1)
+      version = latest_version + 1
+    else:
+      version = 1
+    
+    version_folder = f'version_{version}'
+
+    # Update the outputs_directory
+    outputs_directory = os.path.join(outputs_folder, version_folder)
+    if not os.path.exists(outputs_directory):
+        os.makedirs(outputs_directory)
+    
+    # Save options_file
+    with open(os.path.join(outputs_directory, "options_file.json"), 'w') as json_file:
+        json.dump(options_file, json_file, indent=4)
+
     # Create TensorBoardLogger
-    logger = TensorBoardLogger(save_dir="./", version=None, name=outputs_directory)
+    logger = TensorBoardLogger(save_dir="./", name=outputs_folder, version=version)
 
     # Create ModelCheckpoint callback
     checkpoint_callback = ModelCheckpoint(
-        dirpath=os.path.join(f'{outputs_directory}/{checkpoint}/checkpoints'),
-        filename="model_epoch_{epoch}",
+        dirpath=os.path.join(outputs_directory, 'checkpoints'),
+        filename="model_{epoch}",
         save_top_k=1,  # Save only the best model
         monitor="val_loss",  # Choose the metric to monitor
         mode="min",  # "min" for validation loss, "max" for validation accuracy
@@ -89,8 +108,13 @@ def main(options_file_path, checkpoint=None):
     # Start training
     print("Options:", end='\n')
     print_dict_as_table(options_file)
-    trainer.fit(tapte_lightning, train_loader, val_loader)
+    
+    if checkpoint:
+        checkpoint_path = f"{checkpoint}/checkpoints/last.ckpt"
+        trainer.resume_from_checkpoint = checkpoint_path
+        print(f"Resuming from {checkpoint_path}")
 
+    trainer.fit(tapte_lightning, train_loader, val_loader)
 
 if __name__ == "__main__":
     
