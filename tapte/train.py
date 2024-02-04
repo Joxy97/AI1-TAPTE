@@ -57,10 +57,6 @@ def main(options_file_path, checkpoint=None):
     train_loader = DataLoader(dataset=train_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=options_file["batch_size"], num_workers=options_file["num_of_workers"], shuffle=False)
 
-    # Initialize LightningModule
-    tapte = TAPTE(options_file)
-    tapte_lightning = TAPTELightning(options_file, tapte)
-
     # Setup output folders
     outputs_folder = 'outputs'
     existing_versions = []
@@ -73,7 +69,6 @@ def main(options_file_path, checkpoint=None):
     
     version_folder = f'version_{version}'
 
-    # Update the outputs_directory
     outputs_directory = os.path.join(outputs_folder, version_folder)
     if not os.path.exists(outputs_directory):
         os.makedirs(outputs_directory)
@@ -103,18 +98,24 @@ def main(options_file_path, checkpoint=None):
       accelerator="auto",
       logger=logger,
       callbacks=[checkpoint_callback],
+      log_every_n_steps=1
 )   
-
-    # Start training
-    print("Options:", end='\n')
-    print_dict_as_table(options_file)
     
+      # Start training
+    print("Options:", end='\n')
+    print(f"Saving model in {outputs_directory}")
+    print_dict_as_table(options_file)
+
+    tapte = TAPTE(options_file)
+        
     if checkpoint:
         checkpoint_path = f"{checkpoint}/checkpoints/last.ckpt"
         trainer.resume_from_checkpoint = checkpoint_path
-        print(f"Resuming from {checkpoint_path}")
-
-    trainer.fit(tapte_lightning, train_loader, val_loader)
+        tapte_lightning = TAPTELightning.load_from_checkpoint(checkpoint_path)
+        trainer.fit(tapte_lightning, train_loader, val_loader, ckpt_path=checkpoint_path)
+    else:
+        tapte_lightning = TAPTELightning(options_file, tapte)
+        trainer.fit(tapte_lightning, train_loader, val_loader)
 
 if __name__ == "__main__":
     

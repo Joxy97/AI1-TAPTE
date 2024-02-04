@@ -409,8 +409,8 @@ class TAPTELightning(L.LightningModule):
         self.loss_function.print_results()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.options_file["learning_rate"])
-        return optimizer
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.options_file["learning_rate"])
+        return self.optimizer
 
 
 #CALLBACKS
