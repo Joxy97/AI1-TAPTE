@@ -111,7 +111,7 @@ def main(options_file_path, checkpoint=None):
     if checkpoint:
         checkpoint_path = f"{checkpoint}/checkpoints/last.ckpt"
         trainer.resume_from_checkpoint = checkpoint_path
-        tapte_lightning = TAPTELightning.load_from_checkpoint(checkpoint_path)
+        tapte_lightning = TAPTELightning.load_from_checkpoint(checkpoint_path, options_file=options_file, model=tapte)
         trainer.fit(tapte_lightning, train_loader, val_loader, ckpt_path=checkpoint_path)
     else:
         tapte_lightning = TAPTELightning(options_file, tapte)
