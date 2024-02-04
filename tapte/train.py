@@ -66,6 +66,8 @@ def main(options_file_path, checkpoint=None):
       version = latest_version + 1
     else:
       version = 1
+    if checkpoint:
+      version = int(checkpoint.split('_')[1][0])
     
     version_folder = f'version_{version}'
 
@@ -83,7 +85,7 @@ def main(options_file_path, checkpoint=None):
     # Create ModelCheckpoint callback
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(outputs_directory, 'checkpoints'),
-        filename="model_{epoch}",
+        filename="best_{epoch}",
         save_top_k=1,  # Save only the best model
         monitor="val_loss",  # Choose the metric to monitor
         mode="min",  # "min" for validation loss, "max" for validation accuracy
