@@ -25,7 +25,7 @@ from itertools import permutations
 from tapte.modules import *
 
 
-def main(options_file_path, checkpoint=None):
+def main(options_file_path, checkpoint=None, gpus=None):
     
     # Load options_file:
     file_path = options_file_path
@@ -38,13 +38,15 @@ def main(options_file_path, checkpoint=None):
         print(f"Error decoding JSON: {e}")
     
     # Setup device-agnostic code:
+    if gpus is None:
+       gpus = options_file["gpus"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device != torch.device("cpu"):
       num_cuda_devices = torch.cuda.device_count()
-      if options_file["gpus"] > num_cuda_devices:
-        raise ValueError(f'There are only {num_cuda_devices} GPUs available, but requested {options_file["gpus"]}.')
+      if gpus > num_cuda_devices:
+        raise ValueError(f'There are only {num_cuda_devices} GPUs available, but requested {gpus}.')
       else:
-        gpu_indices = list(range(options_file["gpus"]))
+        gpu_indices = list(range(gpus))
     else:
       gpu_indices = None
     
@@ -96,7 +98,7 @@ def main(options_file_path, checkpoint=None):
     # Initialize Lightning Trainer
     trainer = L.Trainer(
       max_epochs=options_file["epochs"],
-      devices=options_file["gpus"],
+      devices=gpus,
       accelerator="auto",
       logger=logger,
       callbacks=[checkpoint_callback],
@@ -124,7 +126,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Your script description')
     parser.add_argument('options_file_path', type=str, help='Path to the options file')
     parser.add_argument('--checkpoint', type=str, help='Continue from the checkpoint')
+    parser.add_argument('--gpus', type=int, help='Number of GPUs to use for testing')
 
     args = parser.parse_args()
 
-    main(args.options_file_path, args.checkpoint)
+    main(args.options_file_path, args.checkpoint, args.gpus)
