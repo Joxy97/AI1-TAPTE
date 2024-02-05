@@ -35,7 +35,6 @@ cd AI1-TAPTE
 ```
 - Set up the virtual environment and install the required modules. This can automatically be done by running the ```install_script.sh``` using the following commands:  
 ```
-cd AI1-TAPTE
 source install_script.sh
 ```
 - If any error stating the missing module occurs during the training or testing, please install it via:  
