@@ -61,7 +61,10 @@ def main(model_to_test, gpus=None):
     tester = L.Trainer(
     max_epochs=1,
     devices=gpus,
-    accelerator="auto"
+    accelerator="auto",
+    default_root_dir=None,
+    callbacks=False,
+    logger=False 
 )
     
     best_epoch = [d for d in os.listdir(f"{model_to_test}/checkpoints/") if d.startswith('best')]
