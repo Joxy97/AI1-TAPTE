@@ -20,7 +20,8 @@ In alignment with the core concept of SPANet and tailored to the requirements of
 - Tensorboard logging
 
 **Coming soon:**  
-- Classification  
+- Classification
+- Test with multiple jet limits  
 - Boosted topology  
 - Signal process generalization (current version works only for HHH -> 6b)  
 - Automatic 'convert_to_h5.py' script based on the 'options_file.json'
