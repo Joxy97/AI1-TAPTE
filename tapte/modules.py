@@ -374,7 +374,7 @@ class TAPTE(nn.Module):
     self.categories = self.categorizer(torch.mean(self.encodings, dim=0))
 
     mask = self.categories.ge(self.threshold).float()
-    self.assignments = self.assignments * mask.view(self.options_file["batch_size"], self.num_of_particles, 1, 1)
+    self.assignments = self.assignments * mask.view(self.assignments.size(0), self.num_of_particles, 1, 1)
 
     return self.assignments, self.categories
 
