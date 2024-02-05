@@ -8,7 +8,7 @@ AI1-TAPTE is an advanced machine learning model based on a transformer encoder a
 In alignment with the core concept of SPANet and tailored to the requirements of jet reconstruction phenomenology, AI1-TAPTE aims to serve as a versatile tool for arbitrary event topologies. Beyond technical enhancements, the design philosophy of AI1-TAPTE prioritizes simplicity and user-friendliness, making it accessible to scientists with varying levels of programming expertise. The model is crafted to be intuitive and easy to use, ensuring a smooth experience for researchers at any proficiency level.
 
 **Version Notes:**  
-- Version: 0.1.0 - pre-release  
+- Version: v.0.1.0-alpha  
 - Development State: In development
 
 **Available features:**  
