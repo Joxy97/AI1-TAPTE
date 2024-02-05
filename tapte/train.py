@@ -34,8 +34,10 @@ def main(options_file_path, checkpoint=None, gpus=None):
             options_file = json.load(file)
     except FileNotFoundError:
         print(f"The file '{file_path}' does not exist.")
+        return
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON: {e}")
+        return
     
     # Setup device-agnostic code:
     if gpus is None:
