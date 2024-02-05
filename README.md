@@ -31,6 +31,7 @@ In alignment with the core concept of SPANet and tailored to the requirements of
 - Clone the GitHub repository:
 ```
 git clone https://github.com/Joxy97/AI1-TAPTE.git
+cd AI1-TAPTE
 ```
 - Set up the virtual environment and install the required modules. This can automatically be done by running the ```install_script.sh``` using the following commands:  
 ```
