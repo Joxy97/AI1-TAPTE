@@ -2,3 +2,4 @@
 dataset/*.h5
 tapte/__pycache__
 outputs
+ai1_tapte_env
