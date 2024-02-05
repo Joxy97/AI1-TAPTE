@@ -475,11 +475,7 @@ class HybridSymmetricLoss(nn.Module):
     event_proportions = event_proportions.numpy()
     event_proportions_results = PrettyTable()
     event_proportions_results.field_names = ["10 Jets", "0h", "1h", "2h", "3h"]
-    event_proportions_results.add_rows(
-        [
-            ["Proportions", event_proportions[0], event_proportions[1], event_proportions[2], event_proportions[3]]
-        ]
-    )
+    event_proportions_results.add_row(["Proportions", event_proportions[0], event_proportions[1], event_proportions[2], event_proportions[3]])
     
     print("Event proportions:")
     print(event_proportions_results)
@@ -495,14 +491,11 @@ class HybridSymmetricLoss(nn.Module):
     category_percentages = category_percentages.numpy()
     categories_results = PrettyTable()
     categories_results.field_names = ["10 Jets", "0h", "1h", "2h", "3h"]
-    categories_results.add_rows(
-        [
-            ["0h", category_percentages[0][0], category_percentages[0][1], category_percentages[0][2], category_percentages[0][3]],
-            ["1h", category_percentages[1][0], category_percentages[1][1], category_percentages[1][2], category_percentages[1][3]],
-            ["2h", category_percentages[2][0], category_percentages[2][1], category_percentages[2][2], category_percentages[2][3]],
-            ["3h", category_percentages[3][0], category_percentages[3][1], category_percentages[3][2], category_percentages[3][3]],
-        ]
-    )
+
+    categories_results.add_row(["0h", category_percentages[0][0], category_percentages[0][1], category_percentages[0][2], category_percentages[0][3]])
+    categories_results.add_row(["1h", category_percentages[1][0], category_percentages[1][1], category_percentages[1][2], category_percentages[1][3]])
+    categories_results.add_row(["2h", category_percentages[2][0], category_percentages[2][1], category_percentages[2][2], category_percentages[2][3]])
+    categories_results.add_row(["3h", category_percentages[3][0], category_percentages[3][1], category_percentages[3][2], category_percentages[3][3]])
 
     print("Categorization results:")
     print(categories_results)
@@ -510,14 +503,11 @@ class HybridSymmetricLoss(nn.Module):
     higgs_percentages = higgs_percentages.numpy()
     higgs_results = PrettyTable()
     higgs_results.field_names = ["10 Jets", "0h", "1h", "2h", "3h"]
-    higgs_results.add_rows(
-        [
-            ["0h", higgs_percentages[0][0], higgs_percentages[0][1], higgs_percentages[0][2], higgs_percentages[0][3]],
-            ["1h", higgs_percentages[1][0], higgs_percentages[1][1], higgs_percentages[1][2], higgs_percentages[1][3]],
-            ["2h", higgs_percentages[2][0], higgs_percentages[2][1], higgs_percentages[2][2], higgs_percentages[2][3]],
-            ["3h", higgs_percentages[3][0], higgs_percentages[3][1], higgs_percentages[3][2], higgs_percentages[3][3]],
-        ]
-    )
+
+    higgs_results.add_row(["0h", higgs_percentages[0][0], higgs_percentages[0][1], higgs_percentages[0][2], higgs_percentages[0][3]])
+    higgs_results.add_row(["1h", higgs_percentages[1][0], higgs_percentages[1][1], higgs_percentages[1][2], higgs_percentages[1][3]])
+    higgs_results.add_row(["2h", higgs_percentages[2][0], higgs_percentages[2][1], higgs_percentages[2][2], higgs_percentages[2][3]])
+    higgs_results.add_row(["3h", higgs_percentages[3][0], higgs_percentages[3][1], higgs_percentages[3][2], higgs_percentages[3][3]])
 
     print("Assignment results:")
     print(higgs_results)
