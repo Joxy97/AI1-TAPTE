@@ -1,12 +1,12 @@
 {
     "dataset" : "/eos/user/j/jmitic/AI1-TAPTE/dataset/Dataset.h5",
-    "optional_loading_size" : null,
+    "optional_loading_size" : 1000,
     "split" : [0.8, 0.1, 0.1],
-    "num_of_workers" : 4,
-    "batch_size" : 5,
+    "num_of_workers" : 16,
+    "batch_size" : 64,
     
-    "epochs" : 5,
-    "gpus" : 1,
+    "epochs" : 10,
+    "gpus" : 4,
   
     "learning_rate" : 0.001,
   

@@ -395,7 +395,7 @@ class TAPTELightning(L.LightningModule):
         inputs, assignment_labels, category_labels = batch
         assignment_preds, category_preds = self.model(inputs)
         loss = self.loss_function(assignment_preds, category_preds, assignment_labels, category_labels)
-        self.log('val_loss', loss, prog_bar=True, logger=True)
+        self.log('val_loss', loss, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def test_step(self, batch, batch_idx):

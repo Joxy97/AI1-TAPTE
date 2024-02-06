@@ -60,11 +60,12 @@ def main(model_to_test, gpus=None):
     # Initialize Lightning Tester
     tester = L.Trainer(
     max_epochs=1,
-    devices=gpus,
+    devices=gpu_indices,
     accelerator="auto",
+    strategy='ddp_find_unused_parameters_true',
     default_root_dir=None,
     callbacks=False,
-    logger=False 
+    logger=False
 )
     
     best_epoch = [d for d in os.listdir(f"{model_to_test}/checkpoints/") if d.startswith('best')]

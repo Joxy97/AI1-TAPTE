@@ -100,8 +100,9 @@ def main(options_file_path, checkpoint=None, gpus=None):
     # Initialize Lightning Trainer
     trainer = L.Trainer(
       max_epochs=options_file["epochs"],
-      devices=gpus,
+      devices=gpu_indices,
       accelerator="auto",
+      strategy='ddp_find_unused_parameters_true',
       logger=logger,
       callbacks=[checkpoint_callback],
       log_every_n_steps=1
